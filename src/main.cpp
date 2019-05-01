@@ -6,6 +6,13 @@
 #include <stdexcept> // throw errors
 #include <random> //C++ 11 Random Numbers
 
+
+#define PARTICLES 1000
+#define STEPS 50
+#define SENSE_NOISE 3
+#define TURN_NOISE 0.1 //0.1 RAD ~ 5 DEG
+#define FORWARD_NOISE 0.5
+
 namespace plt = matplotlibcpp;
 using namespace std;
 
@@ -218,7 +225,7 @@ void visualization(int n, Robot robot, int step, Robot p[], Robot pr[])
 	plt::plot({ robot.x }, { robot.y }, "bo");
 
 	//Save the image and close the plot
-	plt::save("./Images/Step" + to_string(step) + ".png");
+	plt::save("./img/step_" + to_string(step) + ".png");
 	plt::clf();
 }
 
@@ -227,79 +234,70 @@ int main()
 	// Instantiating a robot object from the Robot class
 	Robot myrobot;
 
-	//Position is random if not set
+	// Position is random if not set
 	myrobot.set(50, 50, 0);
-	myrobot.set_noise(0.1,0.1,3.0);
+	myrobot.set_noise(FORWARD_NOISE , TURN_NOISE, SENSE_NOISE);
 
-	//create particles
-	int particle_num = 1000;
 
-	Robot p1[particle_num];
-	for (int i=0; i<particle_num; i++) {
-		p1[i].set_noise(0.05,0.05,3.0);
-		//cout << p1[i].show_pose() << endl;
+	Robot p[PARTICLES];
+	for (int i=0; i<PARTICLES; i++) {
+		p[i].set_noise(FORWARD_NOISE, TURN_NOISE, SENSE_NOISE);
 	}
+	// Used for moving and plotting
+	Robot p2[PARTICLES];
+	// Selected particles
+	Robot p3[PARTICLES];
 
-	double error;
-	vector<double> z;
-
-	double dir = 0.2;
-	double dist = 3.0;
-
-	int steps = 50;
-	for (int t=0; t<steps; t++) {
-
-
+	for (int t=0; t<STEPS; t++) {
+		double move_dir = 0.2;
+		double move_dist = 3.0;
+		// Generate randomic path
 		//dir += myrobot.gen_gauss_random(0,0.1);
 		//dist = myrobot.gen_gauss_random(2,1);
-		myrobot = myrobot.move(dir, dist);
+
+		// Move robot and sense distance from landmarks
+		myrobot = myrobot.move(move_dir, move_dist);
+		vector<double> z;
 		z = myrobot.sense();
 
-
-
-		Robot p2[particle_num];
-		for (int i=0; i<particle_num; i++) {
-			p2[i] = p1[i].move(dir, dist);
-			p1[i] = p2[i];
-			//cout << p1[i].show_pose() << endl;
+		// Move particles
+		for (int i=0; i<PARTICLES; i++) {
+			p2[i] = p[i].move(move_dir, move_dist);
+			p[i] = p2[i];
+			//cout << p[i].show_pose() << endl;
 		}
 
-
-		double w[particle_num];
-		for (int i=0; i<particle_num; i++) {
-			w[i] = p1[i].measurement_prob(z);
+		// Measure probability of each particle
+		double w[PARTICLES];
+		for (int i=0; i<PARTICLES; i++) {
+			w[i] = p[i].measurement_prob(z);
 			//cout << w[i] << endl;
 		}
 
-
-
-		//Resampling Wheel
-		//int index = U{0...1000)
-		Robot p3[particle_num];
-		int index = gen_real_random() *particle_num;
-		//cout << index << endl;
+		// Resampling Wheel
+		int index = gen_real_random() *PARTICLES;
 		double beta = 0;
-		double maxw = max(w, particle_num);
+		double maxw = max(w, PARTICLES);
 
-		for (int i=0; i<particle_num; i++) {
+		for (int i=0; i<PARTICLES; i++) {
 			beta =+ 2.0 * maxw * gen_real_random();
-			//cout << beta << endl;
 			while (w[index] < beta) {
 				beta -= w[index];
-				index = mod((index+ 1 ),particle_num);
+				index = mod((index+ 1 ),PARTICLES);
 			}
-			//cout << index << endl;
-			p3[i] = p1[index];
+			p3[i] = p[index];
 		}
-		for (int i=0; i<particle_num; i++) {
-			p1[i] = p3[i];
-			//cout << p1[i].show_pose() <<endl;
+		for (int i=0; i<PARTICLES; i++) {
+			p[i] = p3[i];
 		}
-		error = evaluation(myrobot, p1, particle_num);
+		
+		double error;
+		error = evaluation(myrobot, p, PARTICLES);
 		cout << "Step:   " << t << "\terror: " << error << endl;
 		//Generate images
-		visualization(particle_num, myrobot, t, p2, p3);
+		visualization(PARTICLES, myrobot, t, p2, p3);
 	}
 
 	return 0;
-	}
+}
+
